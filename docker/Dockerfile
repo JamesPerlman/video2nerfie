@@ -46,6 +46,7 @@ RUN apt-get update && \
         git \
         libopenexr-dev \
         openexr \
+        python \
     && \
     git clone https://github.com/JamesPerlman/video2nerfie.git ${PROJ_PATH}
 

@@ -26,6 +26,6 @@ COLMAP_DATA_DIR=${WORKDIR}/content/output/colmap_data
 NERFIE_DATA_DIR=${WORKDIR}/content/output/nerfie_dataset
 NERFIE_TRAIN_DIR=${WORKDIR}/content/output/nerfie_trained
 
-python video2nerfie/video2colmap.py -i ${INPUT_PATH} -o ${COLMAP_DATA_DIR}
+python video2colmap/video2colmap.py -i ${INPUT_PATH} -o ${COLMAP_DATA_DIR}
 python colmap2nerfie/colmap2nerfie.py -i ${COLMAP_DATA_DIR} -o ${NERFIE_DATA_DIR}
 python train_nerfie.py -i ${NERFIE_DATA_DIR} -o ${NERFIE_TRAIN_DIR}
