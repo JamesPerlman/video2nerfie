@@ -13,7 +13,8 @@ ENV PROJ_PATH=${HOME_PATH}/video2nerfie
 
 COPY --from=miniconda /opt/conda /opt/conda
 
-RUN echo "export PATH=${PATH}:/opt/conda/bin" >> ~/.bashrc
+RUN echo "export PATH=\${PATH}:/opt/conda/bin" >> ~/.bashrc
+ENV PATH=${PATH}:/opt/conda/bin
 
 # Install apt dependencies first
 
