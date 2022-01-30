@@ -13,7 +13,6 @@ RUN apk add curl git && \
 
 SHELL ["conda", "run", "-n", "video2nerfie", "/bin/bash", "-c"]
 
-RUN pip install jax[cuda11_cudnn82] -f https://storage.googleapis.com/jax-releases/jax_releases.html
 RUN pip install -r requirements.txt
 RUN pip install pandas tensorflow-graphics
 RUN mkdir /env
