@@ -44,7 +44,6 @@ from io import BytesIO
 import random as pyrandom
 import numpy as np
 import PIL
-import IPython
 
 runtime_type = 'gpu'  # @param ['gpu', 'tpu']
 if runtime_type == 'tpu':
