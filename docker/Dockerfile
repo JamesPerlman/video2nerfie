@@ -1,52 +1,28 @@
 # syntax=docker/dockerfile:1
 
-FROM continuumio/miniconda3:4.10.3p0-alpine AS conda_env
+FROM continuumio/miniconda3:4.10.3p0-alpine AS miniconda
 
-ENV DEBIAN_FRONTEND noninteractive
-
-COPY requirements.txt .
-
-RUN apk add curl git && \
-    conda install conda-pack && \
-    curl https://bootstrap.pypa.io/get-pip.py | python && \
-    conda create -n video2nerfie python=3.8
-
-RUN echo "conda activate video2nerfie" >> ~/.bashrc
-SHELL ["/bin/bash", "--login", "-c"]
-
-RUN pip install jax[cuda11_cudnn82] -f https://storage.googleapis.com/jax-releases/jax_releases.html && \
-    pip install -r requirements.txt && \
-    pip install pandas tensorflow-graphics && \
-    mkdir /env && \
-    conda-pack -n video2nerfie -o /env/video2nerfie.tar.gz
+FROM nvidia/cuda:11.5.1-cudnn8-devel-ubuntu20.04 AS main
 
 # Set up CUDA build machine
-
-FROM nvidia/cuda:11.5.1-cudnn8-devel-ubuntu20.04 AS cuda_env
-
-SHELL ["/bin/bash", "-c"]
-
-COPY --from=conda_env /env/video2nerfie.tar.gz .
-
 ENV DEBIAN_FRONTEND noninteractive
 ENV HOME_PATH=/usr/local
 ENV PROJ_PATH=${HOME_PATH}/video2nerfie
 
-# Set up conda env
+# We just need conda from the alpine miniconda build
 
-RUN mkdir /env && \
-    tar -xzf video2nerfie.tar.gz -C /env && \
-    rm video2nerfie.tar.gz && \
-    echo "source /env/bin/activate" >> ~/.bashrc && \
-    echo "export PYTHONPATH=\"${PYTHONPATH}:/usr/local/video2nerfie\"" >> ~/.bashrc
+COPY --from=miniconda /opt/conda /opt/conda
 
-# Install dependencies
+RUN echo "export PATH=${PATH}:/opt/conda/bin"
+
+# Install apt dependencies first
 
 RUN apt-get update && \
     apt-get install -y \
         build-essential \
         cmake \
         ffmpeg \
+        gcc \
         git \
         libboost-program-options-dev \
         libboost-filesystem-dev \
@@ -68,6 +44,20 @@ RUN apt-get update && \
     && \
     git clone https://github.com/JamesPerlman/video2nerfie.git ${PROJ_PATH}
 
+WORKDIR ${PROJ_PATH}
+
+# Create conda env
+
+RUN conda create -n video2nerfie python=3.8 && \
+    echo "conda activate video2nerfie" >> ~/.bashrc
+
+SHELL ["/bin/bash", "--login", "-c"]
+
+RUN pip install jax[cuda11_cudnn82] -f https://storage.googleapis.com/jax-releases/jax_releases.html && \
+    pip install -r requirements.txt && \
+    pip install pandas tensorflow-graphics && \
+    echo "export PYTHONPATH=\"${PYTHONPATH}:/usr/local/video2nerfie\"" >> ~/.bashrc
+
 # Install ceres-solver
 RUN git clone https://github.com/ceres-solver/ceres-solver.git -b 2.0.0 && \
     cd ceres-solver && \
@@ -85,5 +75,3 @@ RUN git clone https://github.com/colmap/colmap.git -b 3.7 && \
     cmake .. && \
     make -j8 && \
     make install
-
-WORKDIR ${PROJ_PATH}
