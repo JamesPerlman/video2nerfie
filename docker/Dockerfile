@@ -2,7 +2,7 @@
 
 FROM continuumio/miniconda3:4.10.3p0-alpine AS miniconda
 
-FROM nvidia/cuda:11.5.1-cudnn8-devel-ubuntu20.04 AS main
+FROM nvidia/cuda:11.4.1-cudnn8-devel-ubuntu20.04 AS main
 
 # Set up CUDA build machine
 ENV DEBIAN_FRONTEND noninteractive
