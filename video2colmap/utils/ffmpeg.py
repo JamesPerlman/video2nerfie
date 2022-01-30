@@ -44,8 +44,6 @@ def extract_frames(
             -r \"{input_video_fps}\" \
             -vsync vfr \
             -vf \"\
-                scale=100:-1, \
-                select=not(mod(n\,10)), \
                 mpdecimate, \
                 setpts=N/FRAME_RATE/TB \
             \" \
