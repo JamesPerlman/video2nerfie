@@ -11,8 +11,10 @@ RUN apk add curl git && \
     curl https://bootstrap.pypa.io/get-pip.py | python && \
     conda create -n video2nerfie python=3.8
 
-SHELL ["conda", "run", "-n", "video2nerfie", "/bin/bash", "-c"]
+RUN echo "conda activate video2nerfie" >> ~/.bashrc
+SHELL ["/bin/bash", "--login", "-c"]
 
+RUN pip install jax[cuda11_cudnn82] -f https://storage.googleapis.com/jax-releases/jax_releases.html
 RUN pip install -r requirements.txt
 RUN pip install pandas tensorflow-graphics
 RUN mkdir /env
@@ -85,5 +87,3 @@ RUN git clone https://github.com/colmap/colmap.git -b 3.7 && \
     make install
 
 WORKDIR ${PROJ_PATH}
-
-
