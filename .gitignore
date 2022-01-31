@@ -1,3 +1,8 @@
+# This is for exported content
+content/
+
+# The rest of this is from the python gitignore on github
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

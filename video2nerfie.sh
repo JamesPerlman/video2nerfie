@@ -21,7 +21,8 @@ if [ -z "${OUTPUT_PATH}" ]; then
     exit 1
 fi
 
-WORKDIR=/usr/local/video2nerfie
+WORKDIR="$(dirname "$(readlink -fm "$0")")"
+
 COLMAP_DATA_DIR=${WORKDIR}/content/output/colmap_data
 NERFIE_DATA_DIR=${WORKDIR}/content/output/nerfie_dataset
 NERFIE_TRAIN_DIR=${WORKDIR}/content/output/nerfie_trained
