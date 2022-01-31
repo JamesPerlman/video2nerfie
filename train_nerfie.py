@@ -22,6 +22,23 @@ train_dir = Path(args.output)
 train_dir.mkdir(exist_ok=True)
 
 ###################################
+# FIX TENSORFLOW/JAX OOM ERRORS   #
+###################################
+
+import tensorflow as tf
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+  try:
+    # Currently, memory growth needs to be the same across GPUs
+    for gpu in gpus:
+      tf.config.experimental.set_memory_growth(gpu, True)
+    logical_gpus = tf.config.list_logical_devices('GPU')
+    print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+  except RuntimeError as e:
+    # Memory growth must be set before GPUs have been initialized
+    print(e)
+
+###################################
 # ENVIRONMENT SETUP               #
 ###################################
 
@@ -194,7 +211,7 @@ from nerfies import schedules
 from nerfies import training
 
 # @markdown Restore a checkpoint if one exists.
-restore_checkpoint = False  # @param{type:'boolean'}
+restore_checkpoint = True  # @param{type:'boolean'}
 
 
 rng = random.PRNGKey(exp_config.random_seed)
@@ -306,10 +323,9 @@ ptrain_step = jax.pmap(
 ###################################
 # @markdown This runs the training loop!
 
-import mediapy
 from nerfies import utils
 from nerfies import visualization as viz
-
+import mediapy
 
 print_every_n_iterations = 100  # @param{type:'number'}
 visualize_results_every_n_iterations = 500  # @param{type:'number'}
@@ -321,6 +337,9 @@ rng = rng + jax.process_index()  # Make random seed separate across hosts.
 keys = random.split(rng, len(devices))
 time_tracker = utils.TimeTracker()
 time_tracker.tic('data', 'total')
+
+visualize_dir = train_dir / "visualization"
+visualize_dir.mkdir(parents=True, exist_ok=True)
 
 for step, batch in zip(range(step, train_config.max_steps + 1), train_iter):
   time_tracker.toc('data')
@@ -348,6 +367,9 @@ for step, batch in zip(range(step, train_config.max_steps + 1), train_iter):
   
   if step % visualize_results_every_n_iterations == 0:
     print(f'[step={step}] Training set visualization')
+    
+    im_prefix = f"step_{step}"
+
     eval_batch = next(train_eval_iter)
     render = render_fn(state, eval_batch, rng=rng)
     rgb = render['rgb']
@@ -356,8 +378,10 @@ for step, batch in zip(range(step, train_config.max_steps + 1), train_iter):
     depth_med = render['med_depth']
     rgb_target = eval_batch['rgb']
     depth_med_viz = viz.colorize(depth_med, cmin=datasource.near, cmax=datasource.far)
-    mediapy.show_images([rgb_target, rgb, depth_med_viz],
-                        titles=['GT RGB', 'Pred RGB', 'Pred Depth'])
+
+    mediapy.write_image(visualize_dir / f"{im_prefix}_training_ground_truth.png", rgb_target)
+    mediapy.write_image(visualize_dir / f"{im_prefix}_training_predicted_rgb.png", rgb)
+    mediapy.write_image(visualize_dir / f"{im_prefix}_training_predicted_depth.png", depth_med_viz)
 
     print(f'[step={step}] Validation set visualization')
     eval_batch = next(val_eval_iter)
@@ -368,8 +392,10 @@ for step, batch in zip(range(step, train_config.max_steps + 1), train_iter):
     depth_med = render['med_depth']
     rgb_target = eval_batch['rgb']
     depth_med_viz = viz.colorize(depth_med, cmin=datasource.near, cmax=datasource.far)
-    mediapy.show_images([rgb_target, rgb, depth_med_viz],
-                       titles=['GT RGB', 'Pred RGB', 'Pred Depth'])
+    
+    mediapy.write_image(visualize_dir / f"{im_prefix}_validation_ground_truth.png", rgb_target)
+    mediapy.write_image(visualize_dir / f"{im_prefix}_validation_predicted_rgb.png", rgb)
+    mediapy.write_image(visualize_dir / f"{im_prefix}_validation_predicted_depth.png", depth_med_viz)
 
   if step % save_checkpoint_every_n_iterations == 0:
     training.save_checkpoint(checkpoint_dir, state)

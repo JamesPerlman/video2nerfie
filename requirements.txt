@@ -30,6 +30,7 @@ kiwisolver==1.3.2
 libclang==13.0.0
 Markdown==3.3.4
 matplotlib==3.4.3
+mediapy==1.0.3
 msgpack==1.0.3
 networkx==2.6.3
 numpy==1.19.5
