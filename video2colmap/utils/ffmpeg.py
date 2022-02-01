@@ -31,7 +31,7 @@ def extract_frames(
     if force_redo is False:
         files_in_output_dir = [file for file in os.listdir(output_frames_path) if bool(re.search("\.png$", file))]
         num_frames_in_video = get_frame_count(input_video_path)
-        if len(files_in_output_dir) == num_frames_in_video:
+        if len(files_in_output_dir) >= num_frames_in_video / 2:
             print("Frames have already been extracted.  Skipping...")
             return
 
@@ -44,6 +44,8 @@ def extract_frames(
             -r \"{input_video_fps}\" \
             -vsync vfr \
             -vf \"\
+                crop=1080:1350:0:285, \
+                select=not(mod(n\,2)), \
                 mpdecimate, \
                 setpts=N/FRAME_RATE/TB \
             \" \

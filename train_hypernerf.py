@@ -1,7 +1,7 @@
-##############################################
-# Most of this code is from the nerfies repo #
-# https://github.com/google/nerfies.git      #
-##############################################
+################################################
+# Most of this code is from the HyperNeRF repo #
+# https://github.com/google/hypernerf.git      #
+################################################
 
 # python video2nerfie/train_nerfie.py -i "content/hoksmac/nerfies_dataset/" -o "content/hoksmac/nerfies_train"
 ###################################
@@ -11,8 +11,8 @@
 from argparse import ArgumentParser
 from pathlib import Path
 
-parser = ArgumentParser("Train Nerfie")
-parser.add_argument("-i", "--input", help="Path to nerfies dataset", type=str, required=True)
+parser = ArgumentParser("Train HyperNeRF")
+parser.add_argument("-i", "--input", help="Path to dataset", type=str, required=True)
 parser.add_argument("-o", "--output", help="Path to trained output data", type=str, required=True)
 
 args = parser.parse_args()
@@ -20,6 +20,7 @@ args = parser.parse_args()
 data_dir = Path(args.input)
 train_dir = Path(args.output)
 train_dir.mkdir(exist_ok=True)
+
 
 ###################################
 # FIX TENSORFLOW/JAX OOM ERRORS   #
@@ -37,6 +38,7 @@ if gpus:
   except RuntimeError as e:
     # Memory growth must be set before GPUs have been initialized
     print(e)
+
 
 ###################################
 # ENVIRONMENT SETUP               #
@@ -77,7 +79,6 @@ logging.info = myprint
 logging.warn = myprint
 logging.error = myprint
 
-
 ###################################
 # CONFIG                          #
 ###################################
@@ -85,9 +86,13 @@ logging.error = myprint
 from pathlib import Path
 from pprint import pprint
 import gin
+from IPython.display import display, Markdown
 
-from nerfies import configs
-
+from hypernerf import models
+from hypernerf import modules
+from hypernerf import warping
+from hypernerf import datasets
+from hypernerf import configs
 
 # @markdown Training configuration.
 max_steps = 1000000  # @param {type: 'number'}
@@ -97,41 +102,95 @@ image_scale = 1  # @param {type: 'number'}
 # @markdown Model configuration.
 use_viewdirs = True  #@param {type: 'boolean'}
 use_appearance_metadata = True  #@param {type: 'boolean'}
-warp_field_type = 'se3'  #@param['se3', 'translation']
-num_warp_freqs = 8  #@param{type:'number'}
 num_coarse_samples = 64  # @param {type: 'number'}
 num_fine_samples = 64  # @param {type: 'number'}
+
+# @markdown Deformation configuration.
+use_warp = True  #@param {type: 'boolean'}
+warp_field_type = '@SE3Field'  #@param['@SE3Field', '@TranslationField']
+warp_min_deg = 0  #@param{type:'number'}
+warp_max_deg = 6  #@param{type:'number'}
+
+# @markdown Hyper-space configuration.
+hyper_num_dims = 8  #@param{type:'number'}
+hyper_point_min_deg = 0  #@param{type:'number'}
+hyper_point_max_deg = 1  #@param{type:'number'}
+hyper_slice_method = 'bendy_sheet'  #@param['none', 'axis_aligned_plane', 'bendy_sheet']
+
 
 checkpoint_dir = Path(train_dir, 'checkpoints')
 checkpoint_dir.mkdir(exist_ok=True, parents=True)
 
 config_str = f"""
-ExperimentConfig.image_scale = {image_scale}
-ExperimentConfig.datasource_spec = {{
-    'type': 'nerfies',
-    'data_dir': '{data_dir}',
-    'camera_type': 'json',
+DELAYED_HYPER_ALPHA_SCHED = {{
+  'type': 'piecewise',
+  'schedules': [
+    (1000, ('constant', 0.0)),
+    (0, ('linear', 0.0, %hyper_point_max_deg, 10000))
+  ],
 }}
 
-ModelConfig.use_warp = True
-ModelConfig.use_viewdirs = {int(use_viewdirs)}
-ModelConfig.use_appearance_metadata = {int(use_appearance_metadata)}
-ModelConfig.warp_field_type = 'se3'
-ModelConfig.num_warp_freqs = {num_warp_freqs}
-ModelConfig.num_coarse_samples = {num_coarse_samples}
-ModelConfig.num_fine_samples = {num_fine_samples}
+ExperimentConfig.image_scale = {image_scale}
+ExperimentConfig.datasource_cls = @NerfiesDataSource
+NerfiesDataSource.data_dir = '{data_dir}'
+NerfiesDataSource.image_scale = {image_scale}
+
+NerfModel.use_viewdirs = {int(use_viewdirs)}
+NerfModel.use_rgb_condition = {int(use_appearance_metadata)}
+NerfModel.num_coarse_samples = {num_coarse_samples}
+NerfModel.num_fine_samples = {num_fine_samples}
+
+NerfModel.use_viewdirs = True
+NerfModel.use_stratified_sampling = True
+NerfModel.use_posenc_identity = False
+NerfModel.nerf_trunk_width = 128
+NerfModel.nerf_trunk_depth = 8
 
 TrainConfig.max_steps = {max_steps}
 TrainConfig.batch_size = {batch_size}
 TrainConfig.print_every = 100
 TrainConfig.use_elastic_loss = False
 TrainConfig.use_background_loss = False
+
+# Warp configs.
+warp_min_deg = {warp_min_deg}
+warp_max_deg = {warp_max_deg}
+NerfModel.use_warp = {use_warp}
+SE3Field.min_deg = %warp_min_deg
+SE3Field.max_deg = %warp_max_deg
+SE3Field.use_posenc_identity = False
+NerfModel.warp_field_cls = @SE3Field
+
 TrainConfig.warp_alpha_schedule = {{
     'type': 'linear',
-    'initial_value': 0.0,
-    'final_value': {num_warp_freqs},
+    'initial_value': {warp_min_deg},
+    'final_value': {warp_max_deg},
     'num_steps': {int(max_steps*0.8)},
 }}
+
+# Hyper configs.
+hyper_num_dims = {hyper_num_dims}
+hyper_point_min_deg = {hyper_point_min_deg}
+hyper_point_max_deg = {hyper_point_max_deg}
+
+NerfModel.hyper_embed_cls = @hyper/GLOEmbed
+hyper/GLOEmbed.num_dims = %hyper_num_dims
+NerfModel.hyper_point_min_deg = %hyper_point_min_deg
+NerfModel.hyper_point_max_deg = %hyper_point_max_deg
+
+TrainConfig.hyper_alpha_schedule = %DELAYED_HYPER_ALPHA_SCHED
+
+hyper_sheet_min_deg = 0
+hyper_sheet_max_deg = 6
+HyperSheetMLP.min_deg = %hyper_sheet_min_deg
+HyperSheetMLP.max_deg = %hyper_sheet_max_deg
+HyperSheetMLP.output_channels = %hyper_num_dims
+
+NerfModel.hyper_slice_method = '{hyper_slice_method}'
+NerfModel.hyper_sheet_mlp_cls = @HyperSheetMLP
+NerfModel.hyper_use_warp_embed = True
+
+TrainConfig.hyper_sheet_alpha_schedule = ('constant', %hyper_sheet_max_deg)
 """
 
 gin.parse_config(config_str)
@@ -142,41 +201,42 @@ with open(config_path, 'w') as f:
   f.write(config_str)
 
 exp_config = configs.ExperimentConfig()
-model_config = configs.ModelConfig()
 train_config = configs.TrainConfig()
 eval_config = configs.EvalConfig()
-
+    
 ###################################
 # CREATE DATASOURCE               #
 ###################################
 
-from nerfies import datasets
-from nerfies import image_utils
+from hypernerf import datasets
+from hypernerf import image_utils
 
-datasource = datasets.from_config(
-  exp_config.datasource_spec,
-  image_scale=exp_config.image_scale,
-  use_appearance_id=model_config.use_appearance_metadata,
-  use_camera_id=model_config.use_camera_metadata,
-  use_warp_id=model_config.use_warp,
-  random_seed=exp_config.random_seed
-)
-
-# show_image(datasource.load_rgb(datasource.train_ids[0]))
+dummy_model = models.NerfModel({}, 0, 0)
+datasource = exp_config.datasource_cls(
+    image_scale=exp_config.image_scale,
+    random_seed=exp_config.random_seed,
+    # Enable metadata based on model needs.
+    use_warp_id=dummy_model.use_warp,
+    use_appearance_id=(
+        dummy_model.nerf_embed_key == 'appearance'
+        or dummy_model.hyper_embed_key == 'appearance'),
+    use_camera_id=dummy_model.nerf_embed_key == 'camera',
+    use_time=dummy_model.warp_embed_key == 'time')
 
 ###################################
 # CREATE TRAINING ITERATORS       #
-###################################
+#################################### 
 
 devices = jax.local_devices()
 
 train_iter = datasource.create_iterator(
     datasource.train_ids,
-    batch_size=train_config.batch_size,
     flatten=True,
     shuffle=True,
+    batch_size=train_config.batch_size,
     prefetch_size=3,
-    devices=devices
+    shuffle_buffer_size=train_config.shuffle_buffer_size,
+    devices=devices,
 )
 
 def shuffled(l):
@@ -187,31 +247,25 @@ def shuffled(l):
   return l
 
 train_eval_iter = datasource.create_iterator(
-    shuffled(datasource.train_ids),
-    batch_size=0,
-    devices=devices
-)
-
+    shuffled(datasource.train_ids), batch_size=0, devices=devices)
 val_eval_iter = datasource.create_iterator(
-    shuffled(datasource.val_ids),
-    batch_size=0,
-    devices=devices
-)
+    shuffled(datasource.val_ids), batch_size=0, devices=devices)
+
 
 ###################################
 # TRAINING - INITIALIZE MODEL     #
 ###################################
 
-# Defines the model and initializes its parameters.
+# @markdown Defines the model and initializes its parameters.
 
 from flax.training import checkpoints
-from nerfies import models
-from nerfies import model_utils
-from nerfies import schedules
-from nerfies import training
+from hypernerf import models
+from hypernerf import model_utils
+from hypernerf import schedules
+from hypernerf import training
 
 # @markdown Restore a checkpoint if one exists.
-restore_checkpoint = True  # @param{type:'boolean'}
+restore_checkpoint = False  # @param{type:'boolean'}
 
 
 rng = random.PRNGKey(exp_config.random_seed)
@@ -219,66 +273,62 @@ np.random.seed(exp_config.random_seed + jax.process_index())
 devices_to_use = jax.devices()
 
 learning_rate_sched = schedules.from_config(train_config.lr_schedule)
+nerf_alpha_sched = schedules.from_config(train_config.nerf_alpha_schedule)
 warp_alpha_sched = schedules.from_config(train_config.warp_alpha_schedule)
 elastic_loss_weight_sched = schedules.from_config(
-    train_config.elastic_loss_weight_schedule)
+train_config.elastic_loss_weight_schedule)
+hyper_alpha_sched = schedules.from_config(train_config.hyper_alpha_schedule)
+hyper_sheet_alpha_sched = schedules.from_config(
+    train_config.hyper_sheet_alpha_schedule)
 
 rng, key = random.split(rng)
 params = {}
 model, params['model'] = models.construct_nerf(
-    key,
-    model_config,
-    batch_size=train_config.batch_size,
-    appearance_ids=datasource.appearance_ids,
-    camera_ids=datasource.camera_ids,
-    warp_ids=datasource.warp_ids,
-    near=datasource.near,
-    far=datasource.far,
-    use_warp_jacobian=train_config.use_elastic_loss,
-    use_weights=train_config.use_elastic_loss
-)
+      key,
+      batch_size=train_config.batch_size,
+      embeddings_dict=datasource.embeddings_dict,
+      near=datasource.near,
+      far=datasource.far)
 
 optimizer_def = optim.Adam(learning_rate_sched(0))
 optimizer = optimizer_def.create(params)
 
 state = model_utils.TrainState(
     optimizer=optimizer,
-    warp_alpha=warp_alpha_sched(0)
-)
-
+    nerf_alpha=nerf_alpha_sched(0),
+    warp_alpha=warp_alpha_sched(0),
+    hyper_alpha=hyper_alpha_sched(0),
+    hyper_sheet_alpha=hyper_sheet_alpha_sched(0))
 scalar_params = training.ScalarParams(
     learning_rate=learning_rate_sched(0),
     elastic_loss_weight=elastic_loss_weight_sched(0),
     warp_reg_loss_weight=train_config.warp_reg_loss_weight,
     warp_reg_loss_alpha=train_config.warp_reg_loss_alpha,
     warp_reg_loss_scale=train_config.warp_reg_loss_scale,
-    background_loss_weight=train_config.background_loss_weight
-)
+    background_loss_weight=train_config.background_loss_weight,
+    hyper_reg_loss_weight=train_config.hyper_reg_loss_weight)
 
 if restore_checkpoint:
   logging.info('Restoring checkpoint from %s', checkpoint_dir)
   state = checkpoints.restore_checkpoint(checkpoint_dir, state)
-
 step = state.optimizer.state.step + 1
 state = jax_utils.replicate(state, devices=devices)
-
 del params
-
 
 ###################################
 # DEFINE PMAPPED FUNCTIONS        #
 ###################################
 
-# This parallelizes the training and evaluation step functions using `jax.pmap`.
+# @markdown This parallelizes the training and evaluation step functions using `jax.pmap`.
 
 import functools
-from nerfies import evaluation
+from hypernerf import evaluation
 
 
-def _model_fn(key_0, key_1, params, rays_dict, warp_extra):
+def _model_fn(key_0, key_1, params, rays_dict, extra_params):
   out = model.apply({'params': params},
                     rays_dict,
-                    warp_extra=warp_extra,
+                    extra_params=extra_params,
                     rngs={
                         'coarse': key_0,
                         'fine': key_1
@@ -291,7 +341,6 @@ pmodel_fn = jax.pmap(
     _model_fn,
     in_axes=(0, 0, 0, 0, 0),  # Only distribute the data input.
     devices=devices_to_use,
-    donate_argnums=(3,),  # Donate the 'rays' argument.
     axis_name='batch',
 )
 
@@ -307,6 +356,7 @@ train_step = functools.partial(
     use_elastic_loss=train_config.use_elastic_loss,
     use_background_loss=train_config.use_background_loss,
     use_warp_reg_loss=train_config.use_warp_reg_loss,
+    use_hyper_reg_loss=train_config.use_hyper_reg_loss,
 )
 ptrain_step = jax.pmap(
     train_step,
@@ -318,17 +368,20 @@ ptrain_step = jax.pmap(
     donate_argnums=(2,),  # Donate the 'batch' argument.
 )
 
+
 ###################################
-# TRAIN A NERFIE!                 #
+# TRAIN HYPERNERF!                #
 ###################################
+
 # @markdown This runs the training loop!
 
-from nerfies import utils
-from nerfies import visualization as viz
 import mediapy
+from hypernerf import utils
+from hypernerf import visualization as viz
+
 
 print_every_n_iterations = 100  # @param{type:'number'}
-visualize_results_every_n_iterations = 5000  # @param{type:'number'}
+visualize_results_every_n_iterations = 500  # @param{type:'number'}
 save_checkpoint_every_n_iterations = 1000  # @param{type:'number'}
 
 
@@ -338,25 +391,34 @@ keys = random.split(rng, len(devices))
 time_tracker = utils.TimeTracker()
 time_tracker.tic('data', 'total')
 
-visualize_dir = train_dir / "visualization"
-visualize_dir.mkdir(parents=True, exist_ok=True)
-
 for step, batch in zip(range(step, train_config.max_steps + 1), train_iter):
   time_tracker.toc('data')
   scalar_params = scalar_params.replace(
       learning_rate=learning_rate_sched(step),
       elastic_loss_weight=elastic_loss_weight_sched(step))
+  # pytype: enable=attribute-error
+  nerf_alpha = jax_utils.replicate(nerf_alpha_sched(step), devices)
   warp_alpha = jax_utils.replicate(warp_alpha_sched(step), devices)
-  state = state.replace(warp_alpha=warp_alpha)
+  hyper_alpha = jax_utils.replicate(hyper_alpha_sched(step), devices)
+  hyper_sheet_alpha = jax_utils.replicate(
+      hyper_sheet_alpha_sched(step), devices)
+  state = state.replace(nerf_alpha=nerf_alpha,
+                        warp_alpha=warp_alpha,
+                        hyper_alpha=hyper_alpha,
+                        hyper_sheet_alpha=hyper_sheet_alpha)
 
   with time_tracker.record_time('train_step'):
-    state, stats, keys = ptrain_step(keys, state, batch, scalar_params)
+    state, stats, keys, _ = ptrain_step(keys, state, batch, scalar_params)
     time_tracker.toc('total')
 
   if step % print_every_n_iterations == 0:
     logging.info(
-        'step=%d, warp_alpha=%.04f, %s',
-        step, warp_alpha_sched(step), time_tracker.summary_str('last'))
+        'step=%d, warp_alpha=%.04f, hyper_alpha=%.04f, hyper_sheet_alpha=%.04f, %s',
+        step, 
+        warp_alpha_sched(step), 
+        hyper_alpha_sched(step), 
+        hyper_sheet_alpha_sched(step), 
+        time_tracker.summary_str('last'))
     coarse_metrics_str = ', '.join(
         [f'{k}={v.mean():.04f}' for k, v in stats['coarse'].items()])
     fine_metrics_str = ', '.join(
@@ -367,9 +429,6 @@ for step, batch in zip(range(step, train_config.max_steps + 1), train_iter):
   
   if step % visualize_results_every_n_iterations == 0:
     print(f'[step={step}] Training set visualization')
-    
-    im_prefix = f"step_{step}"
-
     eval_batch = next(train_eval_iter)
     render = render_fn(state, eval_batch, rng=rng)
     rgb = render['rgb']
@@ -378,7 +437,7 @@ for step, batch in zip(range(step, train_config.max_steps + 1), train_iter):
     depth_med = render['med_depth']
     rgb_target = eval_batch['rgb']
     depth_med_viz = viz.colorize(depth_med, cmin=datasource.near, cmax=datasource.far)
-
+    
     mediapy.write_image(visualize_dir / f"{im_prefix}_training_ground_truth.png", rgb_target)
     mediapy.write_image(visualize_dir / f"{im_prefix}_training_predicted_rgb.png", rgb)
     mediapy.write_image(visualize_dir / f"{im_prefix}_training_predicted_depth.png", depth_med_viz)
@@ -401,5 +460,3 @@ for step, batch in zip(range(step, train_config.max_steps + 1), train_iter):
     training.save_checkpoint(checkpoint_dir, state)
 
   time_tracker.tic('data', 'total')
-
-print("BOOPS")
