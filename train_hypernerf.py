@@ -25,9 +25,12 @@ train_dir.mkdir(exist_ok=True)
 ###################################
 # FIX TENSORFLOW/JAX OOM ERRORS   #
 ###################################
+import os
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 import tensorflow as tf
 gpus = tf.config.list_physical_devices('GPU')
+
 if gpus:
   try:
     # Currently, memory growth needs to be the same across GPUs
@@ -381,7 +384,7 @@ from hypernerf import visualization as viz
 
 
 print_every_n_iterations = 100  # @param{type:'number'}
-visualize_results_every_n_iterations = 500  # @param{type:'number'}
+visualize_results_every_n_iterations = 5000  # @param{type:'number'}
 save_checkpoint_every_n_iterations = 1000  # @param{type:'number'}
 
 
@@ -390,6 +393,9 @@ rng = rng + jax.process_index()  # Make random seed separate across hosts.
 keys = random.split(rng, len(devices))
 time_tracker = utils.TimeTracker()
 time_tracker.tic('data', 'total')
+
+visualize_dir = train_dir / "visualization"
+visualize_dir.mkdir(parents=True, exist_ok=True)
 
 for step, batch in zip(range(step, train_config.max_steps + 1), train_iter):
   time_tracker.toc('data')
