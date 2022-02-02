@@ -42,7 +42,7 @@ if gpus:
     # Memory growth must be set before GPUs have been initialized
     print(e)
 
-
+import faulthandler; faulthandler.enable()
 ###################################
 # ENVIRONMENT SETUP               #
 ###################################
