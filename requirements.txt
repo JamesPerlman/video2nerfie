@@ -3,9 +3,10 @@ flax==0.3.4
 gin-config @ git+https://github.com/google/gin-config@243ba87b3fcfeb2efb4a920b8f19679b61a6f0dc
 imageio==2.9.0
 immutabledict==2.2.0
-jax==0.2.20
+jax==0.2.26
 Markdown==3.3.4
 matplotlib==3.4.3
+mediapy==1.0.3
 numpy==1.19.5
 oauthlib==3.1.1
 opencv-python==4.5.3.56
