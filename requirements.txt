@@ -4,6 +4,7 @@ gin-config @ git+https://github.com/google/gin-config@243ba87b3fcfeb2efb4a920b8f
 imageio==2.9.0
 immutabledict==2.2.0
 jax==0.2.26
+jaxlib @ https://storage.googleapis.com/jax-releases/cuda11/jaxlib-0.1.75+cuda11.cudnn82-cp38-none-manylinux2010_x86_64.whl
 Markdown==3.3.4
 matplotlib==3.4.3
 mediapy==1.0.3
