@@ -56,7 +56,10 @@ SHELL ["conda", "run", "-n", "video2nerfie", "/bin/bash", "-c"]
 
 RUN pip install jax[cuda11_cudnn82] -f https://storage.googleapis.com/jax-releases/jax_releases.html && \
     pip install -r requirements.txt && \
-    echo "export PYTHONPATH=\"${PYTHONPATH}:/usr/local/video2nerfie\"" >> ~/.bashrc
+    echo "export PYTHONPATH=\"${PYTHONPATH}:/usr/local/video2nerfie\"" >> ~/.bashrc && \
+    echo "export XLA_PYTHON_CLIENT_PREALLOCATE=false" && \
+    echo "export XLA_PYTHON_CLIENT_ALLOCATOR=platform" && \
+    echo "export TF_GPU_ALLOCATOR=cuda_malloc_async"
 
 # Install ceres-solver
 RUN git clone https://github.com/ceres-solver/ceres-solver.git -b 2.0.0 && \
