@@ -42,8 +42,10 @@ RUN apt-get update && \
         openexr \
         python \
         qtbase5-dev \
-    && \
-    git clone https://github.com/JamesPerlman/video2nerfie.git ${PROJ_PATH}
+        wget
+
+RUN git clone https://github.com/JamesPerlman/video2nerfie.git ${PROJ_PATH} && \
+    echo Cache busting... cloning commit 5607a17
 
 WORKDIR ${PROJ_PATH}
 
