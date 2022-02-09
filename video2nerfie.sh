@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MODE=hypernerf
+MODE=nerfie
 
 while getopts ":i:o:m:" opt; do
     case $opt in

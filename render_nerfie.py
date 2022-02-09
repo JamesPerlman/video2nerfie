@@ -1,3 +1,13 @@
+# ARGS
+from pathlib import Path
+
+project_dir = Path('/mnt/e/2022/NeRF/Nerfies/biscuit')
+train_dir = project_dir / 'nerfie_trained'
+data_dir = project_dir / 'nerfie_dataset'
+camera_dir = project_dir / 'default-nerfies-cameras'
+
+render_dir = project_dir / 'render-default-nerfies-cameras'
+
 # @title Configure notebook runtime
 # @markdown If you would like to use a GPU runtime instead, change the runtime type by going to `Runtime > Change runtime type`. 
 # @markdown You will have to use a smaller batch size on GPU.
@@ -49,18 +59,12 @@ logging.error = myprint
 # @markdown Change the directories to where you saved your capture and experiment.
 
 
-from pathlib import Path
 from pprint import pprint
 import gin
 from IPython.display import display, Markdown
 
 from nerfies import configs
 
-
-# @markdown The working directory where the trained model is.
-train_dir = Path('/home/james/developer/video2nerfie/content/output/nerfie_trained')  # @param {type: "string"}
-# @markdown The directory to the dataset capture.
-data_dir = Path('/home/james/developer/video2nerfie/content/output/nerfie_dataset')  # @param {type: "string"}
 
 checkpoint_dir = train_dir / 'checkpoints'
 checkpoint_dir.mkdir(exist_ok=True, parents=True)
@@ -184,9 +188,6 @@ render_fn = functools.partial(evaluation.render_image,
 
 from nerfies import utils
 
-camera_path = 'camera-paths/orbit-mild'  # @param {type: 'string'}
-
-camera_dir = Path(data_dir, camera_path)
 print(f'Loading cameras from {camera_dir}')
 test_camera_paths = datasource.glob_cameras(camera_dir)
 test_cameras = utils.parallel_map(datasource.load_camera, test_camera_paths, show_pbar=True)
@@ -194,7 +195,6 @@ test_cameras = utils.parallel_map(datasource.load_camera, test_camera_paths, sho
 # @title Render video frames.
 from nerfies import visualization as viz
 
-render_dir = data_dir / 'render'
 rgb_imgs_dir = render_dir / 'rgb'
 depth_imgs_dir = render_dir / 'depth'
 

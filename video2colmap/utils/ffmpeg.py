@@ -26,31 +26,29 @@ def get_frame_count(input_video_path: Path) -> int:
 def extract_frames(
     input_video_path: Path,
     output_frames_path: Path,
-    force_redo: bool = False,
-    skip_frames: int = 2,
+    crop: str = "in_w:in_h:0:0",
+    img_format: str = "png",
+    size: str = "-1:-1",
+    skip_frames: int = 0,
 ):
     if skip_frames < 1:
         skip_frames = 1
     
-    if force_redo is False:
-        files_in_output_dir = [file for file in os.listdir(output_frames_path) if bool(re.search("\.png$", file))]
-        num_frames_in_video = get_frame_count(input_video_path)
-        if len(files_in_output_dir) >= num_frames_in_video / skip_frames:
-            print("Frames have already been extracted.  Skipping...")
-            return
-
     input_video_fps = get_fps(input_video_path)
-    print(input_video_path)
-    print(output_frames_path)
+
+    output_frames_path.mkdir(parents=True, exist_ok=True)
+
     os.system(f" \
         ffmpeg \
             -i \"{input_video_path}\" \
             -r \"{input_video_fps}\" \
             -vsync vfr \
             -vf \"\
+                crop={crop}, \
+                scale={size}, \
                 select=not(mod(n\,{skip_frames})), \
                 mpdecimate, \
                 setpts=N/FRAME_RATE/TB \
             \" \
-            \"{output_frames_path}/%06d.png\" \
+            \"{output_frames_path}/%06d.{img_format}\" \
     ")
