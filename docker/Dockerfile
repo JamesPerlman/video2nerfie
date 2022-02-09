@@ -42,6 +42,7 @@ RUN apt-get update && \
         openexr \
         python \
         qtbase5-dev \
+        rsync \
         wget
 
 RUN git clone https://github.com/JamesPerlman/video2nerfie.git ${PROJ_PATH} && \

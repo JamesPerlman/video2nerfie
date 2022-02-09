@@ -23,6 +23,7 @@ apt-get install -y \
     libcgal-dev \
     openexr \
     python \
-    qtbase5-dev
+    qtbase5-dev \
+    rsync
 # export PYTHONPATH="${PYTHONPATH}:/usr/local/video2nerfie"
 
