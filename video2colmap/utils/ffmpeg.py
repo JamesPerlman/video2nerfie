@@ -29,7 +29,7 @@ def extract_frames(
     crop: str = "in_w:in_h:0:0",
     img_format: str = "png",
     size: str = "-1:-1",
-    skip_frames: int = 0,
+    skip_frames: int = 15,
 ):
     if skip_frames < 1:
         skip_frames = 1

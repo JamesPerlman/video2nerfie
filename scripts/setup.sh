@@ -14,9 +14,9 @@ git clone https://github.com/JamesPerlman/video2nerfie
 cd video2nerfie
 
 # handle dependencies
-./scripts/install_dependencies.sh
-./scripts/install_colmap.sh
-./scripts/create_environment.sh
+bash scripts/install_dependencies.sh
+bash scripts/install_colmap.sh
+bash scripts/create_environment.sh
 
 # necessary env vars
 echo "export XLA_PYTHON_CLIENT_PREALLOCATE=false" >> ~/.bashrc

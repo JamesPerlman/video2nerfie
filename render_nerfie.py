@@ -1,10 +1,10 @@
 # ARGS
 from pathlib import Path
 
-project_dir = Path('/mnt/e/2022/NeRF/Nerfies/biscuit')
+project_dir = Path('/mnt/e/2022/NeRF/Nerfies/cortines')
 train_dir = project_dir / 'nerfie_trained'
 data_dir = project_dir / 'nerfie_dataset'
-camera_dir = project_dir / 'default-nerfies-cameras'
+camera_dir = data_dir / 'camera-paths/orbit-mild'
 
 render_dir = project_dir / 'render-default-nerfies-cameras'
 
@@ -38,14 +38,9 @@ from absl import logging
 from io import BytesIO
 import random as pyrandom
 import numpy as np
-import PIL
-import IPython
 import tempfile
 import imageio
 import mediapy
-from IPython.display import display, HTML
-from base64 import b64encode
-
 
 # Monkey patch logging.
 def myprint(msg, *args, **kwargs):
@@ -59,10 +54,7 @@ logging.error = myprint
 # @markdown Change the directories to where you saved your capture and experiment.
 
 
-from pprint import pprint
 import gin
-from IPython.display import display, Markdown
-
 from nerfies import configs
 
 
@@ -85,8 +77,6 @@ model_config = configs.ModelConfig()
 train_config = configs.TrainConfig()
 eval_config = configs.EvalConfig()
 
-display(Markdown(
-    gin.config.markdown(gin.operative_config_str())))
 
 # @title Create datasource and show an example.
 
@@ -99,9 +89,8 @@ datasource = datasets.from_config(
   use_appearance_id=model_config.use_appearance_metadata,
   use_camera_id=model_config.use_camera_metadata,
   use_warp_id=model_config.use_warp,
-  random_seed=exp_config.random_seed)
-
-# mediapy.(datasource.load_rgb(datasource.train_ids[0]))
+  random_seed=exp_config.random_seed,
+)
 
 # @title Initialize model
 # @markdown Defines the model and initializes its parameters.
@@ -112,43 +101,40 @@ from nerfies import model_utils
 from nerfies import schedules
 from nerfies import training
 
-
 rng = random.PRNGKey(exp_config.random_seed)
 np.random.seed(exp_config.random_seed + jax.process_index())
 devices = jax.devices()
 
 learning_rate_sched = schedules.from_config(train_config.lr_schedule)
 warp_alpha_sched = schedules.from_config(train_config.warp_alpha_schedule)
-elastic_loss_weight_sched = schedules.from_config(
-    train_config.elastic_loss_weight_schedule)
+elastic_loss_weight_sched = schedules.from_config(train_config.elastic_loss_weight_schedule)
 
 rng, key = random.split(rng)
 params = {}
 model, params['model'] = models.construct_nerf(
-    key,
-    model_config,
-    batch_size=train_config.batch_size,
-    appearance_ids=datasource.appearance_ids,
-    camera_ids=datasource.camera_ids,
-    warp_ids=datasource.warp_ids,
-    near=datasource.near,
-    far=datasource.far,
-    use_warp_jacobian=train_config.use_elastic_loss,
-    use_weights=train_config.use_elastic_loss)
+  key,
+  model_config,
+  batch_size=train_config.batch_size,
+  appearance_ids=datasource.appearance_ids,
+  camera_ids=datasource.camera_ids,
+  warp_ids=datasource.warp_ids,
+  near=datasource.near,
+  far=datasource.far,
+  use_warp_jacobian=train_config.use_elastic_loss,
+  use_weights=train_config.use_elastic_loss,
+)
 
 optimizer_def = optim.Adam(learning_rate_sched(0))
 optimizer = optimizer_def.create(params)
+
 state = model_utils.TrainState(
     optimizer=optimizer,
-    warp_alpha=warp_alpha_sched(0))
-scalar_params = training.ScalarParams(
-    learning_rate=learning_rate_sched(0),
-    elastic_loss_weight=elastic_loss_weight_sched(0),
-    background_loss_weight=train_config.background_loss_weight)
+    warp_alpha=warp_alpha_sched(0),
+)
 logging.info('Restoring checkpoint from %s', checkpoint_dir)
 state = checkpoints.restore_checkpoint(checkpoint_dir, state)
-step = state.optimizer.state.step + 1
 state = jax_utils.replicate(state, devices=devices)
+
 del params
 
 # @title Define pmapped render function.
@@ -156,33 +142,40 @@ del params
 import functools
 from nerfies import evaluation
 
-devices = jax.devices()
-
-
 def _model_fn(key_0, key_1, params, rays_dict, warp_extra):
-  out = model.apply({'params': params},
-                    rays_dict,
-                    warp_extra=warp_extra,
-                    rngs={
-                        'coarse': key_0,
-                        'fine': key_1
-                    },
-                    mutable=False)
+  out = model.apply(
+    { 'params': params },
+    rays_dict,
+    warp_extra=warp_extra,
+    rngs={
+      'coarse': key_0,
+      'fine': key_1
+    },
+    mutable=False,
+  )
   return jax.lax.all_gather(out, axis_name='batch')
 
 pmodel_fn = jax.pmap(
-    # Note rng_keys are useless in eval mode since there's no randomness.
-    _model_fn,
-    in_axes=(0, 0, 0, 0, 0),  # Only distribute the data input.
-    devices=devices,
-    donate_argnums=(3,),  # Donate the 'rays' argument.
-    axis_name='batch',
+  # Note rng_keys are useless in eval mode since there's no randomness.
+  _model_fn,
+  in_axes=(0, 0, 0, 0, 0),  # Only distribute the data input.
+  devices=devices,
+  donate_argnums=(3,),  # Donate the 'rays' argument.
+  axis_name='batch',
 )
 
-render_fn = functools.partial(evaluation.render_image,
-                              model_fn=pmodel_fn,
-                              device_count=len(devices),
-                              chunk=eval_config.chunk)
+# Make random seed separate across hosts.
+rng + jax.host_id()
+
+def render_fn(rays_dict):
+  _render_fn = functools.partial(
+    evaluation.render_image,
+    model_fn=pmodel_fn,
+    device_count=len(devices),
+    chunk=eval_config.chunk,
+  )
+
+  return _render_fn(state, rays_dict, rng=rng)
 
 # @title Load cameras.
 
@@ -202,28 +195,26 @@ render_dir.mkdir(exist_ok=True)
 rgb_imgs_dir.mkdir(exist_ok=True)
 depth_imgs_dir.mkdir(exist_ok=True)
 
-rng = rng + jax.host_id()  # Make random seed separate across hosts.
-keys = random.split(rng, len(devices))
 
 results = []
 for i in range(len(test_cameras)):
   rgb_img_path = rgb_imgs_dir / f"{i:05d}.png"
   depth_img_path = depth_imgs_dir / f"{i:05d}.png"
-  if rgb_img_path.exists() or depth_img_path.exists():
+  if rgb_img_path.exists() and depth_img_path.exists():
     print(f'Frame {i+1}/{len(test_cameras)} alread exists.  Skipping...')
     continue
 
-  print(f'Rendering frame {i+1}/{len(test_cameras)}')
+  print(f'Rendering frame {i + 1}/{len(test_cameras)}')
   camera = test_cameras[i]
   batch = datasets.camera_to_rays(camera)
   batch['metadata'] = {
-      'appearance': jnp.zeros_like(batch['origins'][..., 0, jnp.newaxis], jnp.uint32),
-      'warp': jnp.zeros_like(batch['origins'][..., 0, jnp.newaxis], jnp.uint32),
+    'appearance': jnp.zeros_like(batch['origins'][..., 0, jnp.newaxis], jnp.uint32),
+    'warp': jnp.zeros_like(batch['origins'][..., 0, jnp.newaxis], jnp.uint32),
   }
 
-  render = render_fn(state, batch, rng=rng)
-  rgb = np.array(render['rgb'])
-  depth_med = np.array(render['med_depth'])
+  output = render_fn(batch)
+  rgb = np.array(output['rgb'])
+  depth_med = np.array(output['med_depth'])
   results.append((rgb, depth_med))
   depth_viz = viz.colorize(depth_med.squeeze(), cmin=datasource.near, cmax=datasource.far, invert=True)
 
