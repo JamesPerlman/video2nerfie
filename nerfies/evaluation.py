@@ -62,8 +62,14 @@ def render_image(
   for batch_idx in range(num_batches):
     ray_idx = batch_idx * chunk
     logging.log_every_n_seconds(
-        logging.INFO, 'Rendering batch %d/%d (%d/%d)', 2.0,
-        batch_idx, num_batches, ray_idx, num_rays)
+      logging.INFO,
+      'Rendering batch %d/%d (%d/%d)',
+      2.0,
+      batch_idx,
+      num_batches,
+      ray_idx,
+      num_rays
+    )
     # pylint: disable=cell-var-from-loop
     chunk_slice_fn = lambda x: x[ray_idx:ray_idx + chunk]
     chunk_rays_dict = tree_util.tree_map(chunk_slice_fn, rays_dict)
@@ -80,11 +86,17 @@ def render_image(
     # host_count.
     per_host_rays = num_chunk_rays // jax.process_count()
     chunk_rays_dict = tree_util.tree_map(
-        lambda x: x[(host_id * per_host_rays):((host_id + 1) * per_host_rays)],
-        chunk_rays_dict)
+      lambda x: x[(host_id * per_host_rays):((host_id + 1) * per_host_rays)],
+      chunk_rays_dict
+    )
     chunk_rays_dict = utils.shard(chunk_rays_dict, device_count)
-    model_out = model_fn(key_0, key_1, state.optimizer.target['model'],
-                         chunk_rays_dict, state.warp_extra)
+    model_out = model_fn(
+      key_0,
+      key_1,
+      state.optimizer.target['model'],
+      chunk_rays_dict,
+      state.warp_extra
+    )
     if not default_ret_key:
       ret_key = 'fine' if 'fine' in model_out else 'coarse'
     else:
